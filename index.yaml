@@ -11,4 +11,15 @@ entries:
     urls:
     - https://github.com/cicdteam/charts/releases/download/hcloud-ccm-0.1.7/hcloud-ccm-0.1.7.tgz
     version: 0.1.7
-generated: "2021-03-06T19:57:04.314712455Z"
+  hcloud-csi:
+  - apiVersion: v2
+    appVersion: 1.5.1
+    created: "2021-03-06T20:48:37.566016732Z"
+    description: A Helm chart for Hetzner cloud CSI driver
+    digest: 98d9c688ab0f1f7a6a853bd00344c583f0c502ccc0d6606553b2f6fb164109a2
+    name: hcloud-csi
+    type: application
+    urls:
+    - https://github.com/cicdteam/charts/releases/download/hcloud-csi-0.1.2/hcloud-csi-0.1.2.tgz
+    version: 0.1.2
+generated: "2021-03-06T20:48:37.566022332Z"

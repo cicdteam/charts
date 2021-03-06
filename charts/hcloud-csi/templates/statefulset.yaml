@@ -1,0 +1,175 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: {{ include "hcloud-csi.fullname" . }}
+  labels:
+    {{- include "hcloud-csi.labels" . | nindent 4 }}
+    component: controller
+spec:
+  replicas: {{ .Values.controller.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hcloud-csi.selectorLabels" . | nindent 6 }}
+      component: controller
+  serviceName: {{ include "hcloud-csi.fullname" . }}
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+      {{- with .Values.controller.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hcloud-csi.selectorLabels" . | nindent 8 }}
+        component: controller
+    spec:
+      serviceAccount: {{ include "hcloud-csi.serviceAccountName" . }}
+      containers:
+        - name: csi-attacher
+          image: "{{ .Values.image.attacher.repository }}:{{ .Values.image.attacher.tag }}"
+          imagePullPolicy: {{ .Values.image.attacher.pullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock"
+            - "--leader-election"
+            - "--http-endpoint=:8080"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          ports:
+            - containerPort: 8080
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /healthz/leader-election
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 20
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+        - name: csi-resizer
+          image: "{{ .Values.image.resizer.repository }}:{{ .Values.image.resizer.tag }}"
+          imagePullPolicy: {{ .Values.image.resizer.pullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock"
+            - "--leader-election"
+            - "--http-endpoint=:8081"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          ports:
+            - containerPort: 8081
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /healthz/leader-election
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 20
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+        - name: csi-provisioner
+          image: "{{ .Values.image.provisioner.repository }}:{{ .Values.image.provisioner.tag }}"
+          imagePullPolicy: {{ .Values.image.provisioner.pullPolicy }}
+          args:
+            - "--csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock"
+            - "--leader-election"
+            - "--http-endpoint=:8082"
+            - "--feature-gates=Topology=true"
+            - "--v=5"
+          ports:
+            - containerPort: 8082
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /healthz/leader-election
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+        - name: hcloud-csi-driver
+          image: "{{ .Values.image.hcloud.repository }}:{{ .Values.image.hcloud.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.hcloud.pullPolicy }}
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: METRICS_ENDPOINT
+              value: 0.0.0.0:9189
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: HCLOUD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hcloud-csi.secretName" . }}
+                  key: token
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          ports:
+            - containerPort: 9189
+              name: metrics
+            - name: healthz
+              containerPort: 9808
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+        - name: liveness-probe
+          image: "{{ .Values.image.livenessprobe.repository }}:{{ .Values.image.livenessprobe.tag }}"
+          imagePullPolicy: {{ .Values.image.livenessprobe.pullPolicy }}
+          args:
+            - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
+          volumeMounts:
+            - mountPath: /var/lib/csi/sockets/pluginproxy/
+              name: socket-dir
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

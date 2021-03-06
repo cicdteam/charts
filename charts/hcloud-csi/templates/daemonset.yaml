@@ -1,0 +1,138 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ include "hcloud-csi.fullname" . }}
+  labels:
+    {{- include "hcloud-csi.labels" . | nindent 4 }}
+    component: node
+spec:
+  selector:
+    matchLabels:
+      {{- include "hcloud-csi.selectorLabels" . | nindent 6 }}
+      component: node
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+      {{- with .Values.node.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hcloud-csi.selectorLabels" . | nindent 8 }}
+        component: node
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccount: {{ include "hcloud-csi.serviceAccountName" . }}
+      containers:
+        - name: csi-node-driver-registrar
+          image: "{{ .Values.image.registrar.repository }}:{{ .Values.image.registrar.tag }}"
+          imagePullPolicy: {{ .Values.image.registrar.pullPolicy }}
+          args:
+            - "--v=1"
+            - "--csi-address=/csi/csi.sock"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi.hetzner.cloud/csi.sock"
+            - "--health-port=9809"
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: 9809
+              name: healthz
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+          securityContext:
+            privileged: true
+        - name: hcloud-csi-driver
+          image: "{{ .Values.image.hcloud.repository }}:{{ .Values.image.hcloud.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.hcloud.pullPolicy }}
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: METRICS_ENDPOINT
+              value: 0.0.0.0:9189
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: HCLOUD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hcloud-csi.secretName" . }}
+                  key: token
+          volumeMounts:
+            - name: kubelet-dir
+              mountPath: /var/lib/kubelet
+              mountPropagation: "Bidirectional"
+            - name: plugin-dir
+              mountPath: /csi
+            - name: device-dir
+              mountPath: /dev
+          securityContext:
+            privileged: true
+          ports:
+            - containerPort: 9189
+              name: metrics
+            - name: healthz
+              containerPort: 9808
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+        - name: liveness-probe
+          image: "{{ .Values.image.livenessprobe.repository }}:{{ .Values.image.livenessprobe.tag }}"
+          imagePullPolicy: {{ .Values.image.livenessprobe.pullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+          volumeMounts:
+            - mountPath: /csi
+              name: plugin-dir
+      volumes:
+        - name: kubelet-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi.hetzner.cloud/
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+            type: Directory
+      {{- with .Values.node.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.node.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.node.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

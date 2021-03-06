@@ -1,0 +1,77 @@
+# Default values for hcloud-csi.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  hcloud:
+    repository: hetznercloud/hcloud-csi-driver
+    tag: ""
+    pullPolicy: IfNotPresent
+  attacher:
+    repository: k8s.gcr.io/sig-storage/csi-attacher
+    tag: "v3.1.0"
+    pullPolicy: IfNotPresent
+  resizer:
+    repository: k8s.gcr.io/sig-storage/csi-resizer
+    tag: "v1.1.0"
+    pullPolicy: IfNotPresent
+  provisioner:
+    repository: k8s.gcr.io/sig-storage/csi-provisioner
+    tag: "v2.1.0"
+    pullPolicy: IfNotPresent
+  registrar:
+    repository: k8s.gcr.io/sig-storage/csi-node-driver-registrar
+    tag: "v2.1.0"
+    pullPolicy: IfNotPresent
+  livenessprobe:
+    repository: k8s.gcr.io/sig-storage/livenessprobe
+    tag: "v2.2.0"
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # The name of the service account to use.
+  # If not set a name is generated using the fullname template
+  name: ""
+
+storageClass:
+  name: "hcloud-volumes"
+  isDefault: true
+
+secret:
+  # Specifies whether a secret woth HCLOUD token should be created
+  create: true
+  # Annotations to add to the secret
+  annotations: {}
+  # The name of the secret to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # HCLOUD API token
+  hcloudApiToken: ""
+
+controller:
+  replicaCount: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations:
+    # csi controller manages should be able to run on masters
+    - key: "node-role.kubernetes.io/master"
+      effect: NoSchedule
+    - key: "node-role.kubernetes.io/control-plane"
+      effect: NoSchedule
+  affinity: {}
+
+node:
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations:
+    - effect: NoExecute
+      operator: Exists
+    - effect: NoSchedule
+      operator: Exists
+    - key: CriticalAddonsOnly
+      operator: Exists
+  affinity: {}

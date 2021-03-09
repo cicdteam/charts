@@ -22,4 +22,15 @@ entries:
     urls:
     - https://github.com/cicdteam/charts/releases/download/hcloud-csi-0.1.2/hcloud-csi-0.1.2.tgz
     version: 0.1.2
-generated: "2021-03-06T20:48:37.566022332Z"
+  stolon:
+  - apiVersion: v2
+    appVersion: 0.16.0
+    created: "2021-03-09T20:21:40.851607061Z"
+    description: A Helm chart for stolon - PostgreSQL cloud native High Availability
+    digest: 55f96aa4e681546dbedb663eef4ade8dd9bce1a3247dbc1579f2ba6194caa7a9
+    name: stolon
+    type: application
+    urls:
+    - https://github.com/cicdteam/charts/releases/download/stolon-0.1.0/stolon-0.1.0.tgz
+    version: 0.1.0
+generated: "2021-03-09T20:21:40.851629061Z"

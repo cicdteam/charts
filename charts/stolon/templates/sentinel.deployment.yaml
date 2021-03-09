@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stolon.fullname" . }}-sentinel
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+    component: stolon-sentinel
+spec:
+  replicas: {{ .Values.sentinel.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "stolon.selectorLabels" . | nindent 6 }}
+      component: stolon-sentinel
+  template:
+    metadata:
+      {{- with .Values.sentinel.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "stolon.selectorLabels" . | nindent 8 }}
+        component: stolon-sentinel
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.sentinel.podSecurityContext | nindent 8 }}
+      {{- with .Values.sentinel.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq .Values.sentinel.podAntiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "{{ .Values.sentinel.podAntiAffinityTopologyKey }}"
+              labelSelector:
+                matchLabels:
+                  {{- include "stolon.selectorLabels" . | nindent 18 }}
+                  component: stolon-sentinel
+      {{- else if eq .Values.sentinel.podAntiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: "{{ .Values.sentinel.podAntiAffinityTopologyKey }}"
+                labelSelector:
+                  matchLabels:
+                    {{- include "stolon.selectorLabels" . | nindent 20 }}
+                    component: stolon-sentinel
+      {{- end }}
+      {{- with .Values.sentinel.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: stolon-sentinel
+          securityContext:
+            {{- toYaml .Values.sentinel.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STSENTINEL_CLUSTER_NAME
+              value: {{ include "stolon.fullname" . }}
+            - name: STSENTINEL_STORE_BACKEND
+              value: {{ .Values.store.backend | quote }}
+            {{- if eq .Values.store.backend "kubernetes" }}
+            - name: STSENTINEL_KUBE_RESOURCE_KIND
+              value: {{ .Values.store.kubeResourceKind | quote }}
+            {{- else  }}
+            - name: STSENTINEL_STORE_ENDPOINTS
+              value: {{ .Values.store.endpoints | quote }}
+            {{- end }}
+            - name: STSENTINEL_METRICS_LISTEN_ADDRESS
+              value: "0.0.0.0:{{ .Values.ports.metrics }}"
+            {{- if .Values.sentinel.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.sentinel.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.ports.metrics }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.sentinel.resources | nindent 12 }}
+          command:
+            - "/bin/bash"
+            - "-ec"
+            - "stolon-sentinel"

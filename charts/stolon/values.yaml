@@ -1,0 +1,329 @@
+# Default values for stolon.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: sorintlab/stolon
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: v0.16.0-pg12
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+rbac:
+  create: true
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# backend could be one of the following: consul, etcdv2, etcdv3 or kubernetes
+store:
+  backend: kubernetes
+  kubeResourceKind: configmap
+  #endpoints: "http://stolon-consul:8500"
+
+ports:
+  stolon: 5432
+  metrics: 8080
+
+
+## The unique central point for managing the postgresql parameters is the
+## cluster_specification pgParameters map. This makes easy to centrally manage
+## and keep in sync the postgresql paramaters of all the db instances in the cluster.
+## The keepers will generate a postgresql.conf that contains the parameters defined
+## in the cluster_specification pgParameters map.
+##
+## More details at https://github.com/sorintlab/stolon/blob/master/doc/postgres_parameters.md
+pgParameters: {}
+  ## Postgres performance settings example taken from https://pgtune.leopard.in.ua/
+  ##
+  ## DB Version: 12
+  ## OS Type: linux
+  ## DB Type: web
+  ## Total Memory (RAM): 4 GB
+  ## CPUs num: 2
+  ## Data Storage: san
+  #
+  # max_connections = 200
+  # shared_buffers = 1GB
+  # effective_cache_size = 3GB
+  # maintenance_work_mem = 256MB
+  # checkpoint_completion_target = 0.7
+  # wal_buffers = 16MB
+  # default_statistics_target = 100
+  # random_page_cost = 1.1
+  # effective_io_concurrency = 300
+  # work_mem = 5242kB
+  # min_wal_size = 1GB
+  # max_wal_size = 4GB
+  # max_worker_processes = 2
+  # max_parallel_workers_per_gather = 1
+  # max_parallel_workers = 2
+  # max_parallel_maintenance_workers = 1
+
+## A cluster needs to be initialized providing a cluster specification. This can be achieved using stolonctl init.
+## More details at https://github.com/sorintlab/stolon/blob/master/doc/cluster_spec.md
+clusterSpec: {}
+  # synchronousReplication: true
+  # minSynchronousStandbys: 1
+  # maxSynchronousStandbys: 2
+  # sleepInterval: 1s
+  # maxStandbys: 5
+
+## Super user and Replication user credentials
+##
+## use existig secret with passwords (keys are: "repluser-password" and "superuser-password")
+# existingSecret: stolon-passwords
+
+# if paswords omitted and existing secret not used then they will be auto-generated
+replication:
+  username: "repluser"
+  # password: "replpass"
+
+superuser:
+  username: "stolon"
+  # password: "stolonpass"
+
+## mount PostgreSQL secret as a file instead of passing environment variable
+# usePasswordFile: false
+
+## Persistence parameters
+##
+persistence:
+  enabled: true
+  ## A manually managed Persistent Volume and Claim
+  ## If defined, PVC must be created manually before volume will be bound
+  ## The value is evaluated as a template
+  ##
+  # existingClaim:
+  ## Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ## set, choosing the default provisioner.
+  ##
+  # storageClass: "-"
+  ## Persistent Volume Access Mode
+  ##
+  accessModes:
+    - ReadWriteOnce
+  ## Persistent Volume Claim size
+  ##
+  size: 10Gi
+  ## Persistent Volume Claim annotations
+  ##
+  annotations: {}
+  ## selector can be used to match an existing PersistentVolume
+  ## selector:
+  ##   matchLabels:
+  ##     app: my-app
+  selector: {}
+
+## Init Container parameters
+## Change the owner and group of the persistent volume(s) mountpoint(s) to 'runAsUser:fsGroup' on stolon keeper data dir
+##
+volumePermissions:
+  enabled: false
+
+## Hooks running  on cluster create (install) and update stages
+initialJobs:
+  autoCreateCluster: true
+  autoUpdateCluster: true
+  annotations: {}
+
+## Stolon keeper settings.
+##
+keeper:
+  replicaCount: 3
+
+  uid_prefix: "keeper"
+
+  podAnnotations: {}
+
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  ## Pod affinity (soft or hard)
+  ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  podAntiAffinity: soft
+  podAntiAffinityTopologyKey: "kubernetes.io/hostname"
+
+  extraEnv: []
+  #  - name: STKEEPER_LOG_LEVEL
+  #    value: "info"
+
+  pdb:
+    ## Specifies whether a Pod disruption budget should be created
+    ##
+    create: false
+    minAvailable: 1
+    # maxUnavailable: 1
+
+## Stolon sentinel settings.
+##
+sentinel:
+  replicaCount: 3
+
+  podAnnotations: {}
+
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  ## Pod affinity
+  ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  podAntiAffinity: soft
+  podAntiAffinityTopologyKey: "kubernetes.io/hostname"
+
+  extraEnv: []
+  #  - name: STSENTINEL_LOG_LEVEL
+  #    value: "info"
+
+  pdb:
+    ## Specifies whether a Pod disruption budget should be created
+    ##
+    create: false
+    minAvailable: 1
+    # maxUnavailable: 1
+
+## Stolon proxy settings.
+##
+proxy:
+  replicaCount: 3
+
+  podAnnotations: {}
+
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  service:
+    type: ClusterIP
+
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  ## Pod affinity
+  ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  podAntiAffinity: soft
+  podAntiAffinityTopologyKey: "kubernetes.io/hostname"
+
+  extraEnv: []
+  #  - name: STPROXY_LOG_LEVEL
+  #    value: "info"
+
+  pdb:
+    ## Specifies whether a Pod disruption budget should be created
+    ##
+    create: false
+    minAvailable: 1
+    # maxUnavailable: 1
+
+
+## initdb scripts
+## Specify dictionary of scripts to be run at install step
+##
+# initdbScripts:
+#   my_init_script.sh: |
+#     #!/bin/sh
+#     echo "Do something."
+#   create_db.sql: |
+#     CREATE DATABASE test;
+#     CREATE USER test WITH PASSWORD 'testpass';
+#     GRANT ALL PRIVILEGES ON DATABASE test TO test;
+
+## Enable support ssl into postgres, you must specify the certs.
+## ref: https://www.postgresql.org/docs/10/ssl-tcp.html
+##
+tls:
+  enabled: false
+  rootCa: |-
+  serverCrt: |-
+  serverKey: |-
+
+  # existingSecret: name-of-existing-secret-to-postgresql
+

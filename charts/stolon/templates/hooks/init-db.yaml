@@ -1,0 +1,93 @@
+{{- if .Values.initdbScripts }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "stolon.fullname" . }}-initdb
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "3"
+data:
+  {{- with .Values.initdbScripts }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stolon.fullname" . }}-initdb
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "4"
+spec:
+  template:
+    metadata:
+      {{- with .Values.initialJobs.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "stolon.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      {{- with .Values.keeper.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.keeper.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: initdb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PGUSER
+              value: {{ .Values.superuser.username | quote}}
+            {{- if .Values.usePasswordFile }}
+            - name: PGPASSFILE
+              value: "/opt/stolon/secrets/superuser-password"
+            {{- else }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stolon.fullname" . }}
+                  key: superuser-password
+            {{- end }}
+            - name: PGHOST
+              value: {{ include "stolon.fullname" . }}
+            - name: PGPORT
+              value: {{ .Values.ports.stolon | quote }}
+            - name: PGDATABASE
+              value: postgres
+          command:
+            - /bin/bash
+            - -ec
+            - "while ! psql -q -o /dev/null -c 'select 1;' 2>/dev/null; do echo waiting for cluster; sleep 5; done; source /docker-entrypoint.sh; docker_process_init_files /opt/stolon/initdb/*"
+
+          volumeMounts:
+            - name: initdb-scripts
+              mountPath: /opt/stolon/initdb
+            {{- if .Values.usePasswordFile }}
+            - name: stolon-passwords
+              mountPath: /opt/stolon/secrets/
+            {{- end }}
+      volumes:
+        - name: initdb-scripts
+          configMap:
+            name: {{ include "stolon.fullname" . }}-initdb
+            defaultMode: 420
+        {{- if .Values.usePasswordFile }}
+        - name: stolon-passwords
+          secret:
+            secretName: {{ include "stolon.fullname" . }}
+        {{- end }}
+{{- end }}

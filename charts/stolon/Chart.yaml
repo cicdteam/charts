@@ -1,0 +1,6 @@
+apiVersion: v2
+name: stolon
+description: A Helm chart for stolon - PostgreSQL cloud native High Availability
+type: application
+version: 0.1.0
+appVersion: 0.16.0

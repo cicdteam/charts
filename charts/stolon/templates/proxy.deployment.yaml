@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stolon.fullname" . }}-proxy
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+    component: stolon-proxy
+spec:
+  replicas: {{ .Values.proxy.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "stolon.selectorLabels" . | nindent 6 }}
+      component: stolon-proxy
+  template:
+    metadata:
+      {{- with .Values.proxy.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "stolon.selectorLabels" . | nindent 8 }}
+        component: stolon-proxy
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.proxy.podSecurityContext | nindent 8 }}
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq .Values.proxy.podAntiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "{{ .Values.proxy.podAntiAffinityTopologyKey }}"
+              labelSelector:
+                matchLabels:
+                  {{- include "stolon.selectorLabels" . | nindent 18 }}
+                  component: stolon-proxy
+      {{- else if eq .Values.proxy.podAntiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: "{{ .Values.proxy.podAntiAffinityTopologyKey }}"
+                labelSelector:
+                  matchLabels:
+                    {{- include "stolon.selectorLabels" . | nindent 20 }}
+                    component: stolon-proxy
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: stolon-proxy
+          securityContext:
+            {{- toYaml .Values.proxy.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STPROXY_CLUSTER_NAME
+              value: {{ include "stolon.fullname" . }}
+            - name: STPROXY_STORE_BACKEND
+              value: {{ .Values.store.backend | quote }}
+            {{- if eq .Values.store.backend "kubernetes" }}
+            - name: STPROXY_KUBE_RESOURCE_KIND
+              value: {{ .Values.store.kubeResourceKind | quote }}
+            {{- else  }}
+            - name: STPROXY_STORE_ENDPOINTS
+              value: {{ .Values.store.endpoints | quote }}
+            {{- end }}
+            - name: STPROXY_LISTEN_ADDRESS
+              value: "0.0.0.0"
+            - name: STPROXY_METRICS_LISTEN_ADDRESS
+              value: "0.0.0.0:{{ .Values.ports.metrics }}"
+            {{- if .Values.proxy.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.proxy.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: stolon
+              containerPort: {{ .Values.ports.stolon }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.ports.metrics }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.ports.stolon }}
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+          command:
+            - "/bin/bash"
+            - "-ec"
+            - "stolon-proxy"

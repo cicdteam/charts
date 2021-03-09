@@ -1,0 +1,19 @@
+{{- if .Values.keeper.pdb.create }}
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "stolon.fullname" . }}
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+    component: stolon-keeper
+spec:
+  {{- if .Values.keeper.pdb.minAvailable }}
+  minAvailable: {{ .Values.keeper.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.keeper.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.keeper.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "stolon.selectorLabels" . | nindent 6 }}
+      component: stolon-keeper
+{{- end }}

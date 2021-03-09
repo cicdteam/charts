@@ -1,0 +1,48 @@
+{{ if .Values.initialJobs.autoUpdateCluster }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stolon.fullname" . }}-update-cluster
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "2"
+spec:
+  template:
+    metadata:
+      {{- with .Values.initialJobs.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "stolon.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      {{- with .Values.keeper.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.keeper.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: update-cluster
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/stolonctl"]
+          args:
+            - update
+            - --cluster-name={{ include "stolon.fullname" . }}
+            - --store-backend={{ .Values.store.backend }}
+            {{- if eq .Values.store.backend "kubernetes" }}
+            - --kube-resource-kind={{ .Values.store.kubeResourceKind }}
+            {{- else }}
+            - --store-endpoints={{ .Values.store.endpoints }}
+            {{- end }}
+            - --patch
+            - '{ {{- range $key, $value := .Values.clusterSpec }} {{ $key | quote }}: {{ if typeIs "string" $value }} {{ $value | quote }} {{ else }} {{ $value }} {{ end }}, {{- end }} {{ if .Values.tls.enabled }}"pgParameters": {{- $pgParameters := .Values.pgParameters -}}{{ $all := set $pgParameters "ssl" "on" }}{{ $all := set $all "ssl_cert_file" "/certs/serverCrt.crt" }} {{ $all := set $all "ssl_key_file" "/certs/serverKey.key" }}{{ $all := set $all "ssl_ca_file" "/certs/rootCa.crt" }}{{ toJson $all }} {{ else }}"pgParameters": {{- $pgParameters := .Values.pgParameters -}}{{ $all := set $pgParameters "ssl" "off" }}{{ $all := set $all "ssl_cert_file" nil }} {{ $all := set $all "ssl_key_file" nil }}{{ $all := set $all "ssl_ca_file" nil }}{{ toJson $all }}{{ end}}}'
+{{ end }}

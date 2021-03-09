@@ -1,0 +1,212 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "stolon.fullname" . }}-keeper
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+    component: stolon-keeper
+spec:
+  serviceName: {{ template "stolon.fullname" . }}-keeper-headless
+  replicas: {{ .Values.keeper.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "stolon.selectorLabels" . | nindent 6 }}
+      component: stolon-keeper
+  template:
+    metadata:
+      {{- with .Values.keeper.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "stolon.selectorLabels" . | nindent 8 }}
+        component: stolon-keeper
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        {{- toYaml .Values.keeper.podSecurityContext | nindent 8 }}
+      {{- with .Values.keeper.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq .Values.keeper.podAntiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "{{ .Values.keeper.podAntiAffinityTopologyKey }}"
+              labelSelector:
+                matchLabels:
+                  {{- include "stolon.selectorLabels" . | nindent 18 }}
+                  component: stolon-keeper
+      {{- else if eq .Values.keeper.podAntiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: "{{ .Values.keeper.podAntiAffinityTopologyKey }}"
+                labelSelector:
+                  matchLabels:
+                    {{- include "stolon.selectorLabels" . | nindent 20 }}
+                    component: stolon-keeper
+      {{- end }}
+      {{- with .Values.keeper.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.volumePermissions.enabled .Values.persistence.enabled }}
+      initContainers:
+        - name: volume-permissions
+          image: busybox:1.32.1
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: STKEEPER_DATA_DIR
+              value: "/stolon-data"
+          command:
+            - /bin/sh
+          args:
+            - -ec
+            - chown -R {{ .Values.keeper.podSecurityContext.runAsUser }}:{{ .Values.keeper.podSecurityContext.fsGroup }} ${STKEEPER_DATA_DIR}
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /stolon-data
+              name: data
+      {{- end }}
+      containers:
+        - name: stolon-keeper
+          securityContext:
+            {{- toYaml .Values.keeper.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STKEEPER_PG_ADVERTISE_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: STKEEPER_PG_LISTEN_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: STKEEPER_CLUSTER_NAME
+              value: {{ include "stolon.fullname" . }}
+            - name: STKEEPER_STORE_BACKEND
+              value: {{ .Values.store.backend | quote }}
+            {{- if eq .Values.store.backend "kubernetes" }}
+            - name: STKEEPER_KUBE_RESOURCE_KIND
+              value: {{ .Values.store.kubeResourceKind | quote }}
+            {{- else  }}
+            - name: STKEEPER_STORE_ENDPOINTS
+              value: {{ .Values.store.endpoints | quote }}
+            {{- end }}
+            - name: STKEEPER_DATA_DIR
+              value: "/stolon-data"
+            - name: STKEEPER_PG_REPL_USERNAME
+              value: {{ .Values.replication.username | quote}}
+            {{- if .Values.usePasswordFile }}
+            - name: STKEEPER_PG_REPL_PASSWORDFILE
+              value: "/opt/stolon/secrets/repluser-password"
+            {{- else }}
+            - name: STKEEPER_PG_REPL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stolon.fullname" . }}
+                  key: repluser-password
+            {{- end }}
+            - name: STKEEPER_PG_SU_USERNAME
+              value: {{ .Values.superuser.username | quote}}
+            {{- if .Values.usePasswordFile }}
+            - name: STKEEPER_PG_SU_PASSWORDFILE
+              value: "/opt/stolon/secrets/superuser-password"
+            {{- else }}
+            - name: STKEEPER_PG_SU_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stolon.fullname" . }}
+                  key: superuser-password
+            {{- end }}
+            - name: STKEEPER_METRICS_LISTEN_ADDRESS
+              value: "0.0.0.0:{{ .Values.ports.metrics }}"
+            {{- if .Values.keeper.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.keeper.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: stolon
+              containerPort: {{ .Values.ports.stolon }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.ports.metrics }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.keeper.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.usePasswordFile }}
+            - name: stolon-passwords
+              mountPath: /opt/stolon/secrets/
+            {{- end }}
+            - mountPath: /stolon-data
+              name: data
+          command:
+            - "/bin/bash"
+            - "-ec"
+            - "test -d ${STKEEPER_DATA_DIR}/postgres && chmod 0700 ${STKEEPER_DATA_DIR}/postgres; stolon-keeper --uid {{ .Values.keeper.uid_prefix }}${HOSTNAME##*-}"
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - "stolonctl --cluster-name={{ include "stolon.fullname" . }} --store-backend={{ .Values.store.backend }}{{- if eq .Values.store.backend "kubernetes" }} --kube-resource-kind={{ .Values.store.kubeResourceKind }}{{- else }} --store-endpoints={{ .Values.store.endpoints }}{{- end }} failkeeper {{ .Values.keeper.uid_prefix }}${HOSTNAME##*-} || true"
+     {{- if or (.Values.usePasswordFile) (not .Values.persistence.enabled) }}
+      volumes:
+     {{- end }}
+        {{- if .Values.usePasswordFile }}
+        - name: stolon-passwords
+          secret:
+            secretName: {{ include "stolon.fullname" . }}
+        {{- end }}
+      {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+      {{- with .Values.persistence.existingClaim }}
+            claimName: {{ tpl . $ }}
+      {{- end }}
+      {{- else if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+  {{- else if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- if .Values.persistence.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.persistence.annotations "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        {{- if .Values.persistence.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.persistence.selector "context" $) | nindent 10 }}
+        {{- end -}}
+        {{- if .Values.persistence.storageClass }}
+        {{- if (eq "-" .Values.persistence.storageClass) }}
+        storageClassName: ""
+        {{ else }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+        {{- end }}
+  {{- end }}

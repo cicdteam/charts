@@ -136,8 +136,8 @@ spec:
             {{- end }}
             - name: STKEEPER_METRICS_LISTEN_ADDRESS
               value: "0.0.0.0:{{ .Values.ports.metrics }}"
-            {{- if .Values.keeper.extraEnvVars }}
-            {{- include "common.tplvalues.render" (dict "value" .Values.keeper.extraEnvVars "context" $) | nindent 12 }}
+            {{- if .Values.keeper.extraEnv }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.keeper.extraEnv "context" $) | nindent 12 }}
             {{- end }}
           ports:
             - name: stolon

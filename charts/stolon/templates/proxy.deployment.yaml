@@ -83,8 +83,8 @@ spec:
               value: "0.0.0.0"
             - name: STPROXY_METRICS_LISTEN_ADDRESS
               value: "0.0.0.0:{{ .Values.ports.metrics }}"
-            {{- if .Values.proxy.extraEnvVars }}
-            {{- include "common.tplvalues.render" (dict "value" .Values.proxy.extraEnvVars "context" $) | nindent 12 }}
+            {{- if .Values.proxy.extraEnv }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.proxy.extraEnv "context" $) | nindent 12 }}
             {{- end }}
           ports:
             - name: stolon

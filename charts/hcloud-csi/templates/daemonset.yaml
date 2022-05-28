@@ -65,6 +65,8 @@ spec:
               value: unix:///csi/csi.sock
             - name: METRICS_ENDPOINT
               value: 0.0.0.0:9189
+            - name: ENABLE_METRICS
+              value: "true"
             - name: KUBE_NODE_NAME
               valueFrom:
                 fieldRef:

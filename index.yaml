@@ -23,6 +23,16 @@ entries:
     version: 0.1.7
   hcloud-csi:
   - apiVersion: v2
+    appVersion: 1.6.0
+    created: "2022-05-28T19:15:18.874039342Z"
+    description: A Helm chart for Hetzner cloud CSI driver
+    digest: 0425da2b7c7e206c654231c564b92fb14293829ee905ff04d86d2020813a3ea3
+    name: hcloud-csi
+    type: application
+    urls:
+    - https://github.com/cicdteam/charts/releases/download/hcloud-csi-0.1.4/hcloud-csi-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
     appVersion: 1.5.3
     created: "2021-07-18T17:59:37.362753545Z"
     description: A Helm chart for Hetzner cloud CSI driver
@@ -63,4 +73,4 @@ entries:
     urls:
     - https://github.com/cicdteam/charts/releases/download/stolon-0.1.0/stolon-0.1.0.tgz
     version: 0.1.0
-generated: "2021-07-18T17:59:37.362773546Z"
+generated: "2022-05-28T19:15:18.874064044Z"

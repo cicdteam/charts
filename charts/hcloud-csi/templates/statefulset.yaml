@@ -88,7 +88,7 @@ spec:
             - "--csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock"
             - "--leader-election"
             - "--http-endpoint=:8082"
-            - "--feature-gates=Topology=true"
+            - "--feature-gates=Topology=false"
             - "--v=5"
           ports:
             - containerPort: 8082

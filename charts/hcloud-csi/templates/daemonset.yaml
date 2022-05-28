@@ -31,10 +31,10 @@ spec:
           image: "{{ .Values.image.registrar.repository }}:{{ .Values.image.registrar.tag }}"
           imagePullPolicy: {{ .Values.image.registrar.pullPolicy }}
           args:
-            - "--v=1"
+            - "--v=5"
             - "--csi-address=/csi/csi.sock"
             - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi.hetzner.cloud/csi.sock"
-            - "--health-port=9809"
+            - "--http-endpoint=:9809"
           env:
             - name: KUBE_NODE_NAME
               valueFrom:
